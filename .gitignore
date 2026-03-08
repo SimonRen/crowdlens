@@ -1,0 +1,12 @@
+data/
+__pycache__/
+*.pyc
+.pytest_cache/
+node_modules/
+frontend/dist/
+*.egg-info/
+.env
+.venv/
+*.pt
+videos/*.mp4
+.jarvis/
