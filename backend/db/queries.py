@@ -63,7 +63,7 @@ def upsert_track(conn: sqlite3.Connection, session_id: str, track_id: int,
             last_seen_at = excluded.last_seen_at
     """, (row_id, session_id, track_id, classification, age_estimate,
           gender_estimate, confidence, now, now))
-    conn.commit()
+    # NOTE: caller is responsible for conn.commit() (batched per frame)
 
 
 def get_session_tracks(conn: sqlite3.Connection, session_id: str) -> list[dict]:

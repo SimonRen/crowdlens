@@ -17,6 +17,9 @@ from db.database import init_db
 from db.models import create_tables
 from db import queries
 
+# Number of consistent votes before a track is considered stable
+STABLE_VOTE_COUNT = 5
+
 
 def put_drop_oldest(q: mp.Queue, item):
     """Put item into bounded queue, dropping oldest if full."""
@@ -31,6 +34,14 @@ def put_drop_oldest(q: mp.Queue, item):
             q.put_nowait(item)
         except queue.Full:
             pass
+
+
+def _is_stable(votes: list[str]) -> bool:
+    """Check if a track's vote history has a stable majority."""
+    if len(votes) < STABLE_VOTE_COUNT:
+        return False
+    majority, count = Counter(votes).most_common(1)[0]
+    return count >= STABLE_VOTE_COUNT
 
 
 def cv_worker(
@@ -52,7 +63,7 @@ def cv_worker(
         model_name=f"{settings.detection_model}.pt",
         input_size=settings.input_resolution,
     )
-    classifier = PersonClassifier()
+    classifier = PersonClassifier(child_age_threshold=settings.child_age_threshold)
     annotator = FrameAnnotator()
 
     # Initialize DB (own connection for this process)
@@ -125,54 +136,73 @@ def cv_worker(
             track_ids = det["track_ids"]
             boxes = det["boxes_xyxy"]
 
-            # 2. Classify with CLIP + majority voting
+            # 2. Classify with MiVOLO V2 (batched) + majority voting
             # Classify on interval frames OR when a new track_id is first seen
+            # Skip tracks with stable vote history (early exit)
             run_classification = frame_count % settings.classification_interval == 0
+            crops_to_classify: list[np.ndarray] = []
+            tids_to_classify: list[int] = []
+
             for tid, box in zip(track_ids, boxes):
                 is_new = tid not in classifications
-                if not run_classification and not is_new:
+                is_stable = not is_new and _is_stable(vote_history.get(tid, []))
+                if not is_new and (not run_classification or is_stable):
                     continue
 
                 x1, y1, x2, y2 = box.astype(int)
                 crop = frame[y1:y2, x1:x2]
-                result = classifier.classify_crop(crop)
+                crops_to_classify.append(crop)
+                tids_to_classify.append(tid)
 
-                if result is not None:
-                    cls_label = result["classification"]
+            # Batched inference
+            db_dirty = False
+            if crops_to_classify:
+                batch_results = classifier.classify_batch(crops_to_classify)
+                for tid, result in zip(tids_to_classify, batch_results):
+                    if result is not None:
+                        cls_label = result["classification"]
 
-                    # Accumulate votes (keep last 5)
-                    if tid not in vote_history:
-                        vote_history[tid] = []
-                    vote_history[tid].append(cls_label)
-                    if len(vote_history[tid]) > 5:
-                        vote_history[tid] = vote_history[tid][-5:]
+                        # Accumulate votes (keep last window)
+                        if tid not in vote_history:
+                            vote_history[tid] = []
+                        vote_history[tid].append(cls_label)
+                        if len(vote_history[tid]) > STABLE_VOTE_COUNT:
+                            vote_history[tid] = vote_history[tid][-STABLE_VOTE_COUNT:]
 
-                    # Use majority vote as final classification
-                    majority = Counter(vote_history[tid]).most_common(1)[0][0]
-                    classifications[tid] = {
-                        "classification": majority,
-                        "confidence": result["confidence"],
-                    }
+                        # Use majority vote as final classification
+                        majority = Counter(vote_history[tid]).most_common(1)[0][0]
+                        classifications[tid] = {
+                            "classification": majority,
+                            "confidence": result["confidence"],
+                            "age": result.get("age"),
+                        }
 
-                    queries.upsert_track(
-                        conn, session_id, tid,
-                        classification=majority,
-                        age_estimate=None,
-                        gender_estimate=None,
-                        confidence=result["confidence"],
-                    )
-                elif tid not in classifications:
-                    classifications[tid] = {
-                        "classification": "unknown",
-                        "confidence": None,
-                    }
-                    queries.upsert_track(
-                        conn, session_id, tid,
-                        classification="unknown",
-                        age_estimate=None,
-                        gender_estimate=None,
-                        confidence=None,
-                    )
+                        queries.upsert_track(
+                            conn, session_id, tid,
+                            classification=majority,
+                            age_estimate=result.get("age"),
+                            gender_estimate=result["classification"],
+                            confidence=result["confidence"],
+                        )
+                        db_dirty = True
+                    elif tid not in classifications:
+                        classifications[tid] = {
+                            "classification": "unknown",
+                            "confidence": None,
+                            "age": None,
+                        }
+                        queries.upsert_track(
+                            conn, session_id, tid,
+                            classification="unknown",
+                            age_estimate=None,
+                            gender_estimate=None,
+                            confidence=None,
+                        )
+                        db_dirty = True
+
+            # Batch commit once per frame instead of per-track
+            if db_dirty:
+                conn.commit()
 
             # 3. Annotate frame
             detections = sv.Detections.from_ultralytics(det["result"])
@@ -232,6 +262,7 @@ def cv_worker(
                     total_unique_children=session_total["children"],
                     total_unique_unknown=session_total["unknown"],
                 )
+
                 last_snapshot_time = now
 
     finally:

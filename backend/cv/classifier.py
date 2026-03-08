@@ -1,61 +1,75 @@
 import numpy as np
 import torch
-from PIL import Image
-
-
-# Text prompts for zero-shot classification
-LABELS = ["an adult man", "an adult woman", "a young child"]
-LABEL_MAP = {0: "man", 1: "woman", 2: "child"}
+from transformers import AutoModelForImageClassification, AutoConfig, AutoImageProcessor
 
 
 class PersonClassifier:
-    """Full-body CLIP classifier. Works from any angle — no face needed."""
+    """MiVOLO V2 age+gender classifier. Works from full body crops — no face needed."""
 
-    def __init__(self):
-        from transformers import CLIPProcessor, CLIPModel
-        self.model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
-        self.processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
-        self.model.eval()
+    def __init__(self, child_age_threshold: int = 13):
+        self.child_age_threshold = child_age_threshold
 
-        # Pre-tokenize text labels once
-        self._text_inputs = self.processor(
-            text=[f"a photo of {l}" for l in LABELS],
-            return_tensors="pt",
-            padding=True,
+        self.config = AutoConfig.from_pretrained(
+            "iitolstykh/mivolo_v2", trust_remote_code=True,
         )
+        self.model = AutoModelForImageClassification.from_pretrained(
+            "iitolstykh/mivolo_v2", trust_remote_code=True, torch_dtype=torch.float16,
+        )
+        self.model.eval()
+        self.processor = AutoImageProcessor.from_pretrained(
+            "iitolstykh/mivolo_v2", trust_remote_code=True,
+        )
+        self._gender_labels = self.config.gender_id2label
 
-    def classify_crop(self, crop: np.ndarray) -> dict | None:
-        """Classify a person crop as man/woman/child using CLIP.
+    def classify_batch(self, crops: list[np.ndarray]) -> list[dict | None]:
+        """Classify a batch of person body crops.
 
         Args:
-            crop: BGR numpy array (person bounding box crop)
+            crops: list of BGR numpy arrays (person bounding box crops)
 
         Returns:
-            dict with classification and confidence, or None if crop too small.
+            list of dicts with classification/confidence/age, or None for too-small crops.
         """
-        if crop.shape[0] < 40 or crop.shape[1] < 20:
-            return None
+        results: list[dict | None] = [None] * len(crops)
+        valid_indices: list[int] = []
+        valid_crops: list[np.ndarray] = []
 
-        # Convert BGR → RGB → PIL
-        rgb = crop[:, :, ::-1]
-        pil_img = Image.fromarray(rgb)
+        for i, crop in enumerate(crops):
+            if crop.shape[0] < 40 or crop.shape[1] < 20:
+                continue
+            # BGR → RGB for processor
+            valid_crops.append(crop[:, :, ::-1].copy())
+            valid_indices.append(i)
 
-        # Process image
-        image_inputs = self.processor(images=pil_img, return_tensors="pt")
+        if not valid_crops:
+            return results
 
+        # Process all crops in one batch
+        body_input = self.processor(images=valid_crops)["pixel_values"]
+        body_input = body_input.to(dtype=self.model.dtype, device=self.model.device)
+
+        # MiVOLO accepts body_input without face_input
         with torch.no_grad():
-            outputs = self.model(
-                pixel_values=image_inputs["pixel_values"],
-                input_ids=self._text_inputs["input_ids"],
-                attention_mask=self._text_inputs["attention_mask"],
-            )
-            # Softmax over logits_per_image to get probabilities
-            probs = outputs.logits_per_image.softmax(dim=-1)[0]
+            output = self.model(body_input=body_input)
 
-        best_idx = probs.argmax().item()
-        confidence = probs[best_idx].item()
+        for j, idx in enumerate(valid_indices):
+            age = output.age_output[j].item()
+            gender_idx = output.gender_class_idx[j].item()
+            gender_prob = output.gender_probs[j].item()
+            gender = self._gender_labels[gender_idx]
 
-        return {
-            "classification": LABEL_MAP[best_idx],
-            "confidence": round(confidence, 3),
-        }
+            # Derive classification from age + gender
+            if age < self.child_age_threshold:
+                classification = "child"
+            elif gender.lower() in ("male", "man"):
+                classification = "man"
+            else:
+                classification = "woman"
+
+            results[idx] = {
+                "classification": classification,
+                "confidence": round(gender_prob, 3),
+                "age": round(age, 1),
+            }
+
+        return results

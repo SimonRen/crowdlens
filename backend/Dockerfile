@@ -21,10 +21,11 @@ COPY --from=builder /install /usr/local
 # Pre-download YOLO model (into WORKDIR so detector finds it)
 ADD https://github.com/ultralytics/assets/releases/download/v8.4.0/yolo26n.pt /app/yolo26n.pt
 
-# Pre-download CLIP model
-RUN python -c "from transformers import CLIPModel, CLIPProcessor; \
-    CLIPModel.from_pretrained('openai/clip-vit-base-patch32'); \
-    CLIPProcessor.from_pretrained('openai/clip-vit-base-patch32')"
+# Pre-download MiVOLO V2 model
+RUN python -c "from transformers import AutoModelForImageClassification, AutoConfig, AutoImageProcessor; \
+    AutoConfig.from_pretrained('iitolstykh/mivolo_v2', trust_remote_code=True); \
+    AutoModelForImageClassification.from_pretrained('iitolstykh/mivolo_v2', trust_remote_code=True); \
+    AutoImageProcessor.from_pretrained('iitolstykh/mivolo_v2', trust_remote_code=True)"
 
 WORKDIR /app
 COPY . .

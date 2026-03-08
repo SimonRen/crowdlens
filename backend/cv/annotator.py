@@ -58,8 +58,9 @@ class FrameAnnotator:
             if cls == "unknown":
                 labels.append(f"Person #{tid}")
             else:
-                conf_str = f" ({conf:.2f})" if conf is not None else ""
-                labels.append(f"{cls.capitalize()} #{tid}{conf_str}")
+                age = info.get("age")
+                age_str = f" ~{int(age)}y" if age is not None else ""
+                labels.append(f"{cls.capitalize()} #{tid}{age_str}")
 
         detections.class_id = np.array(new_class_ids)
 
