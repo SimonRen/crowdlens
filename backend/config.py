@@ -3,7 +3,7 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    detection_model: str = "yolo11n"
+    detection_model: str = "yolo26n"
     child_age_threshold: int = 13
     classification_interval: int = 3
     jpeg_quality: int = 70

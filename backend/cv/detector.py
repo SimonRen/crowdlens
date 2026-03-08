@@ -2,7 +2,7 @@ import numpy as np
 
 
 class PersonDetector:
-    def __init__(self, model_name: str = "yolo11n.pt", input_size: int = 640):
+    def __init__(self, model_name: str = "yolo26n.pt", input_size: int = 640):
         from ultralytics import YOLO
         self.model = YOLO(model_name)
         self.input_size = input_size

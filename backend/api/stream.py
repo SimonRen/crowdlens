@@ -8,10 +8,9 @@ router = APIRouter()
 async def mjpeg_generator(hub):
     """Yield latest MJPEG frames from StreamHub. Multi-client safe."""
     while True:
-        try:
-            frame_bytes = await hub.wait_frame()
-        except Exception:
-            await anyio.sleep(0.01)
+        frame_bytes = await hub.wait_frame()
+        if frame_bytes is None:
+            await anyio.sleep(0.1)
             continue
         yield (
             b"--frame\r\n"

@@ -9,7 +9,7 @@ interface MonitorState {
   setSessionId: (id: string | null) => void
   setStats: (stats: StatsEvent) => void
   setConnected: (connected: boolean) => void
-  clearChart: () => void
+  clearSession: () => void
 }
 
 export const useMonitorStore = create<MonitorState>((set) => ({
@@ -27,5 +27,5 @@ export const useMonitorStore = create<MonitorState>((set) => ({
       ],
     })),
   setConnected: (connected) => set({ isConnected: connected }),
-  clearChart: () => set({ chartData: [], stats: null }),
+  clearSession: () => set({ chartData: [], stats: null }),
 }))

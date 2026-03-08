@@ -2,6 +2,7 @@ import multiprocessing as mp
 import queue
 import signal
 import time
+from collections import Counter
 from datetime import datetime, timezone
 
 import cv2
@@ -10,8 +11,7 @@ import supervision as sv
 
 from config import Settings
 from cv.detector import PersonDetector
-from cv.classifier import FaceClassifier
-from cv.policy import classify_person
+from cv.classifier import PersonClassifier
 from cv.annotator import FrameAnnotator
 from db.database import init_db
 from db.models import create_tables
@@ -52,7 +52,7 @@ def cv_worker(
         model_name=f"{settings.detection_model}.pt",
         input_size=settings.input_resolution,
     )
-    classifier = FaceClassifier(det_size=(640, 640))
+    classifier = PersonClassifier()
     annotator = FrameAnnotator()
 
     # Initialize DB (own connection for this process)
@@ -63,7 +63,8 @@ def cv_worker(
     cap = None
     session_id = None
     frame_count = 0
-    classifications: dict[int, dict] = {}  # track_id -> classification info
+    classifications: dict[int, dict] = {}  # track_id -> best classification
+    vote_history: dict[int, list[str]] = {}  # track_id -> list of classification votes
     last_snapshot_time = 0.0
     fps_counter = 0
     fps_time = time.time()
@@ -81,6 +82,7 @@ def cv_worker(
                     session_id = cmd["session_id"]
                     frame_count = 0
                     classifications.clear()
+                    vote_history.clear()
                     last_snapshot_time = time.time()
                     detector.reset_tracker()
                 elif cmd["type"] == "stop":
@@ -89,6 +91,7 @@ def cv_worker(
                         cap = None
                     session_id = None
                     classifications.clear()
+                    vote_history.clear()
             except queue.Empty:
                 pass
 
@@ -99,10 +102,12 @@ def cv_worker(
 
             ret, frame = cap.read()
             if not ret:
-                # Loop the video
+                # Loop the video — reset tracker and classifications to avoid
+                # double-counting the same people across loops
                 cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
                 detector.reset_tracker()
                 classifications.clear()
+                vote_history.clear()
                 continue
 
             frame_count += 1
@@ -120,39 +125,54 @@ def cv_worker(
             track_ids = det["track_ids"]
             boxes = det["boxes_xyxy"]
 
-            # 2. Classify faces (every Nth frame)
-            if frame_count % settings.classification_interval == 0:
-                for tid, box in zip(track_ids, boxes):
-                    x1, y1, x2, y2 = box.astype(int)
-                    crop = frame[y1:y2, x1:x2]
-                    face_result = classifier.analyze_crop(crop)
+            # 2. Classify with CLIP + majority voting
+            # Classify on interval frames OR when a new track_id is first seen
+            run_classification = frame_count % settings.classification_interval == 0
+            for tid, box in zip(track_ids, boxes):
+                is_new = tid not in classifications
+                if not run_classification and not is_new:
+                    continue
 
-                    if face_result is not None:
-                        cls_result = classify_person(
-                            age=face_result["age"],
-                            gender=face_result["gender"],
-                            det_score=face_result["det_score"],
-                            threshold=settings.child_age_threshold,
-                        )
-                        classifications[tid] = cls_result
+                x1, y1, x2, y2 = box.astype(int)
+                crop = frame[y1:y2, x1:x2]
+                result = classifier.classify_crop(crop)
 
-                        # Persist track
-                        queries.upsert_track(
-                            conn, session_id, tid,
-                            classification=cls_result["classification"],
-                            age_estimate=cls_result["age_estimate"],
-                            gender_estimate=cls_result["gender_estimate"],
-                            confidence=cls_result["confidence"],
-                        )
-                    elif tid not in classifications:
-                        classifications[tid] = classify_person(None, None, None)
-                        queries.upsert_track(
-                            conn, session_id, tid,
-                            classification="unknown",
-                            age_estimate=None,
-                            gender_estimate=None,
-                            confidence=None,
-                        )
+                if result is not None:
+                    cls_label = result["classification"]
+
+                    # Accumulate votes (keep last 5)
+                    if tid not in vote_history:
+                        vote_history[tid] = []
+                    vote_history[tid].append(cls_label)
+                    if len(vote_history[tid]) > 5:
+                        vote_history[tid] = vote_history[tid][-5:]
+
+                    # Use majority vote as final classification
+                    majority = Counter(vote_history[tid]).most_common(1)[0][0]
+                    classifications[tid] = {
+                        "classification": majority,
+                        "confidence": result["confidence"],
+                    }
+
+                    queries.upsert_track(
+                        conn, session_id, tid,
+                        classification=majority,
+                        age_estimate=None,
+                        gender_estimate=None,
+                        confidence=result["confidence"],
+                    )
+                elif tid not in classifications:
+                    classifications[tid] = {
+                        "classification": "unknown",
+                        "confidence": None,
+                    }
+                    queries.upsert_track(
+                        conn, session_id, tid,
+                        classification="unknown",
+                        age_estimate=None,
+                        gender_estimate=None,
+                        confidence=None,
+                    )
 
             # 3. Annotate frame
             detections = sv.Detections.from_ultralytics(det["result"])

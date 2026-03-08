@@ -1,4 +1,3 @@
-import json
 from collections.abc import AsyncIterable
 
 import anyio
@@ -12,8 +11,10 @@ router = APIRouter()
 async def stats_stream(request: Request) -> AsyncIterable[ServerSentEvent]:
     hub = request.app.state.hub
     while True:
-        try:
-            stats = await hub.wait_stats()
-            yield ServerSentEvent(data=json.dumps(stats), event="stats")
-        except Exception:
-            await anyio.sleep(0.1)
+        stats = await hub.wait_stats()
+        if stats is None:
+            # Send keepalive comment to prevent proxy timeout
+            yield ServerSentEvent(comment="keepalive")
+            continue
+        # Pass dict directly — ServerSentEvent handles JSON serialization
+        yield ServerSentEvent(data=stats, event="stats")

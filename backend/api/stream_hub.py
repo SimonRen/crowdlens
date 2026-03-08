@@ -1,4 +1,3 @@
-import asyncio
 import queue
 import threading
 
@@ -7,11 +6,7 @@ import anyio
 
 class StreamHub:
     """Consumes from multiprocessing.Queue and caches latest frame/stats.
-    Multiple HTTP clients read copies of the latest data (fan-out).
-    Runs a background thread to drain the mp.Queue.
-
-    Thread-safety: uses loop.call_soon_threadsafe + asyncio.Condition
-    so that the drain thread can safely notify async waiters.
+    Multiple HTTP clients poll the latest data via version counters (fan-out).
     """
 
     def __init__(self, frame_queue, stats_queue):
@@ -21,32 +16,9 @@ class StreamHub:
         self.latest_stats: dict | None = None
         self._frame_version = 0
         self._stats_version = 0
-        self._frame_cond = asyncio.Condition()
-        self._stats_cond = asyncio.Condition()
-        self._loop: asyncio.AbstractEventLoop | None = None
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._drain_loop, daemon=True)
         self._thread.start()
-
-    def bind_loop(self, loop: asyncio.AbstractEventLoop):
-        """Bind to the running event loop. Must be called from the async context."""
-        self._loop = loop
-
-    def _notify_frame(self):
-        """Called via call_soon_threadsafe to notify all frame waiters."""
-        asyncio.ensure_future(self._do_notify_frame())
-
-    async def _do_notify_frame(self):
-        async with self._frame_cond:
-            self._frame_cond.notify_all()
-
-    def _notify_stats(self):
-        """Called via call_soon_threadsafe to notify all stats waiters."""
-        asyncio.ensure_future(self._do_notify_stats())
-
-    async def _do_notify_stats(self):
-        async with self._stats_cond:
-            self._stats_cond.notify_all()
 
     def _drain_loop(self):
         """Background thread: drain queues, update latest values."""
@@ -56,46 +28,39 @@ class StreamHub:
                 self.latest_frame = self._frame_queue.get_nowait()
                 self._frame_version += 1
                 got_something = True
-                if self._loop is not None:
-                    self._loop.call_soon_threadsafe(self._notify_frame)
             except queue.Empty:
                 pass
             try:
                 self.latest_stats = self._stats_queue.get_nowait()
                 self._stats_version += 1
                 got_something = True
-                if self._loop is not None:
-                    self._loop.call_soon_threadsafe(self._notify_stats)
             except queue.Empty:
                 pass
             if not got_something:
                 self._stop.wait(timeout=0.01)
 
-    async def wait_frame(self) -> bytes:
-        """Wait for a new frame. Multiple concurrent callers each get notified."""
+    async def wait_frame(self) -> bytes | None:
+        """Wait for a new frame via version polling. Returns None if timeout."""
         version = self._frame_version
-        while self.latest_frame is None:
-            await anyio.sleep(0.01)
-        async with self._frame_cond:
-            # Wait until a new frame arrives (version changes)
-            while self._frame_version == version:
-                try:
-                    await asyncio.wait_for(self._frame_cond.wait(), timeout=1.0)
-                except asyncio.TimeoutError:
-                    break
+        deadline = 5.0  # max wait seconds
+        waited = 0.0
+        while self._frame_version == version:
+            if self._stop.is_set() or waited >= deadline:
+                return self.latest_frame  # may be None if no frames yet
+            await anyio.sleep(0.02)
+            waited += 0.02
         return self.latest_frame
 
-    async def wait_stats(self) -> dict:
-        """Wait for new stats. Multiple concurrent callers each get notified."""
+    async def wait_stats(self) -> dict | None:
+        """Wait for new stats via version polling. Returns None if timeout."""
         version = self._stats_version
-        while self.latest_stats is None:
-            await anyio.sleep(0.1)
-        async with self._stats_cond:
-            while self._stats_version == version:
-                try:
-                    await asyncio.wait_for(self._stats_cond.wait(), timeout=2.0)
-                except asyncio.TimeoutError:
-                    break
+        deadline = 5.0
+        waited = 0.0
+        while self._stats_version == version:
+            if self._stop.is_set() or waited >= deadline:
+                return self.latest_stats
+            await anyio.sleep(0.05)
+            waited += 0.05
         return self.latest_stats
 
     def stop(self):

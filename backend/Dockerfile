@@ -19,14 +19,12 @@ RUN apt-get update && \
 COPY --from=builder /install /usr/local
 
 # Pre-download YOLO model (into WORKDIR so detector finds it)
-ADD https://github.com/ultralytics/assets/releases/download/v8.4.0/yolo11n.pt /app/yolo11n.pt
+ADD https://github.com/ultralytics/assets/releases/download/v8.4.0/yolo26n.pt /app/yolo26n.pt
 
-# Pre-download InsightFace models
-RUN mkdir -p /root/.insightface/models && \
-    wget -q https://github.com/deepinsight/insightface/releases/download/v0.7/buffalo_l.zip \
-        -O /tmp/buffalo_l.zip && \
-    unzip -q /tmp/buffalo_l.zip -d /root/.insightface/models/ && \
-    rm /tmp/buffalo_l.zip
+# Pre-download CLIP model
+RUN python -c "from transformers import CLIPModel, CLIPProcessor; \
+    CLIPModel.from_pretrained('openai/clip-vit-base-patch32'); \
+    CLIPProcessor.from_pretrained('openai/clip-vit-base-patch32')"
 
 WORKDIR /app
 COPY . .

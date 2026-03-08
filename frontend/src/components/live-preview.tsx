@@ -1,60 +1,26 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useMonitorStore } from '../stores/monitor'
 
 export function LivePreview() {
-  const imgRef = useRef<HTMLImageElement>(null)
   const { sessionId, isConnected, stats } = useMonitorStore()
-  const [stale, setStale] = useState(false)
   const [streamKey, setStreamKey] = useState(0)
-  const lastFrameTime = useRef(Date.now())
 
-  // Set initial stream key when session starts
+  // New stream connection when session starts
   useEffect(() => {
     if (sessionId) {
       setStreamKey(Date.now())
-      setStale(false)
     }
-  }, [sessionId])
-
-  // Use SSE stats as heartbeat proxy for stream liveness.
-  // MJPEG onLoad only fires on the first frame of a multipart response,
-  // so we track the SSE stats timestamp instead (arrives at similar frequency).
-  useEffect(() => {
-    if (stats?.timestamp) {
-      lastFrameTime.current = Date.now()
-      setStale(false)
-    }
-  }, [stats?.timestamp])
-
-  // Reconnect logic: re-set src if no SSE stats for 3s (proxy for stale stream)
-  useEffect(() => {
-    if (!sessionId) return
-    const interval = setInterval(() => {
-      if (Date.now() - lastFrameTime.current > 3000) {
-        setStale(true)
-        setStreamKey(Date.now())
-      }
-    }, 2000)
-    return () => clearInterval(interval)
   }, [sessionId])
 
   return (
-    <div className="relative bg-[var(--color-bg)] border border-[var(--color-border)] rounded-lg overflow-hidden aspect-video">
+    <div className="relative bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg overflow-hidden w-full h-full flex items-center justify-center min-h-[300px]">
       {sessionId ? (
         <>
           <img
-            ref={imgRef}
             src={`/api/stream?t=${streamKey}`}
             alt="Live feed"
-            className="w-full h-full object-contain"
+            className="max-w-full max-h-full object-contain"
           />
-          {stale && (
-            <div className="absolute inset-0 flex items-center justify-center bg-black/60">
-              <span className="text-[var(--color-muted)] font-[family-name:var(--font-body)]">
-                Reconnecting...
-              </span>
-            </div>
-          )}
           {/* Connection status dot */}
           <div className="absolute top-3 left-3 flex items-center gap-2">
             <div
@@ -63,7 +29,7 @@ export function LivePreview() {
               }`}
             />
             <span className="text-xs text-[var(--color-muted)] font-[family-name:var(--font-body)]">
-              {isConnected ? 'Live' : 'Disconnected'}
+              {isConnected ? 'Live' : 'Connecting...'}
             </span>
           </div>
           {/* FPS counter */}
@@ -76,11 +42,9 @@ export function LivePreview() {
           )}
         </>
       ) : (
-        <div className="w-full h-full flex items-center justify-center min-h-[300px]">
-          <span className="text-[var(--color-muted)] font-[family-name:var(--font-body)]">
-            Select a channel and start monitoring
-          </span>
-        </div>
+        <span className="text-[var(--color-muted)] font-[family-name:var(--font-body)]">
+          Select a channel and start monitoring
+        </span>
       )}
     </div>
   )

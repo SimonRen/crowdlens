@@ -1,4 +1,3 @@
-import asyncio
 import multiprocessing as mp
 import os
 from contextlib import asynccontextmanager
@@ -54,7 +53,6 @@ async def lifespan(app: FastAPI):
     # StreamHub: caches latest frame/stats, fans out to multiple HTTP clients
     from api.stream_hub import StreamHub
     hub = StreamHub(frame_queue, stats_queue)
-    hub.bind_loop(asyncio.get_running_loop())
     app.state.hub = hub
 
     yield
@@ -79,7 +77,7 @@ async def lifespan(app: FastAPI):
     db.close()
 
 
-app = FastAPI(title="Live Feed Monitor", lifespan=lifespan)
+app = FastAPI(title="CrowdLens", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

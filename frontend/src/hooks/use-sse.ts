@@ -12,7 +12,11 @@ export function useSSE() {
 
     es.addEventListener('stats', (e) => {
       const data: StatsEvent = JSON.parse(e.data)
-      setStats(data)
+      // Only accept stats for the active session
+      const currentSessionId = useMonitorStore.getState().sessionId
+      if (currentSessionId && data.session_id === currentSessionId) {
+        setStats(data)
+      }
       setConnected(true)
     })
 

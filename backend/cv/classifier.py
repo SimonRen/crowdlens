@@ -1,31 +1,61 @@
 import numpy as np
+import torch
+from PIL import Image
 
 
-class FaceClassifier:
-    def __init__(self, det_size: tuple[int, int] = (640, 640), det_thresh: float = 0.5):
-        from insightface.app import FaceAnalysis
-        self.app = FaceAnalysis(
-            name="buffalo_l",
-            allowed_modules=["detection", "genderage"],
-            providers=["CPUExecutionProvider"],
+# Text prompts for zero-shot classification
+LABELS = ["an adult man", "an adult woman", "a young child"]
+LABEL_MAP = {0: "man", 1: "woman", 2: "child"}
+
+
+class PersonClassifier:
+    """Full-body CLIP classifier. Works from any angle — no face needed."""
+
+    def __init__(self):
+        from transformers import CLIPProcessor, CLIPModel
+        self.model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
+        self.processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+        self.model.eval()
+
+        # Pre-tokenize text labels once
+        self._text_inputs = self.processor(
+            text=[f"a photo of {l}" for l in LABELS],
+            return_tensors="pt",
+            padding=True,
         )
-        self.app.prepare(ctx_id=0, det_thresh=det_thresh, det_size=det_size)
 
-    def analyze_crop(self, crop: np.ndarray) -> dict | None:
-        """Run face analysis on a person crop.
+    def classify_crop(self, crop: np.ndarray) -> dict | None:
+        """Classify a person crop as man/woman/child using CLIP.
 
-        Returns dict with age, gender, det_score or None if no face found.
+        Args:
+            crop: BGR numpy array (person bounding box crop)
+
+        Returns:
+            dict with classification and confidence, or None if crop too small.
         """
-        if crop.shape[0] < 20 or crop.shape[1] < 20:
+        if crop.shape[0] < 40 or crop.shape[1] < 20:
             return None
 
-        faces = self.app.get(crop, max_num=1)
-        if not faces:
-            return None
+        # Convert BGR → RGB → PIL
+        rgb = crop[:, :, ::-1]
+        pil_img = Image.fromarray(rgb)
 
-        face = faces[0]
+        # Process image
+        image_inputs = self.processor(images=pil_img, return_tensors="pt")
+
+        with torch.no_grad():
+            outputs = self.model(
+                pixel_values=image_inputs["pixel_values"],
+                input_ids=self._text_inputs["input_ids"],
+                attention_mask=self._text_inputs["attention_mask"],
+            )
+            # Softmax over logits_per_image to get probabilities
+            probs = outputs.logits_per_image.softmax(dim=-1)[0]
+
+        best_idx = probs.argmax().item()
+        confidence = probs[best_idx].item()
+
         return {
-            "age": face.age,
-            "gender": face.sex,  # 'M' or 'F'
-            "det_score": float(face.det_score),
+            "classification": LABEL_MAP[best_idx],
+            "confidence": round(confidence, 3),
         }

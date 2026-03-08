@@ -9,7 +9,7 @@ import { startSession, stopSession } from '../lib/api'
 
 export function Dashboard() {
   const [channelId, setChannelId] = useState('')
-  const { sessionId, setSessionId, clearChart } = useMonitorStore()
+  const { sessionId, setSessionId, clearSession } = useMonitorStore()
   const [loading, setLoading] = useState(false)
 
   useSSE()
@@ -18,7 +18,7 @@ export function Dashboard() {
     if (!channelId) return
     setLoading(true)
     try {
-      clearChart()
+      clearSession()
       const res = await startSession(channelId)
       setSessionId(res.session_id)
     } catch (err) {
@@ -42,9 +42,9 @@ export function Dashboard() {
   }
 
   return (
-    <div className="flex flex-col gap-4 p-4 min-h-screen">
+    <div className="flex flex-col p-4 min-h-[calc(100vh-49px)] gap-4">
       {/* Top bar */}
-      <div className="flex items-center justify-between gap-4 flex-wrap">
+      <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg px-4 py-3 flex items-center justify-between gap-4 flex-wrap">
         <div className="flex items-center gap-3">
           <ChannelSelector value={channelId} onChange={setChannelId} />
         </div>
@@ -69,18 +69,24 @@ export function Dashboard() {
         </div>
       </div>
 
-      {/* Main area */}
+      {/* Main area: video left (stretch to match right), stats + chart right */}
       <div className="flex flex-col lg:flex-row gap-4 flex-1">
-        <div className="lg:w-2/3">
+        {/* Left: Live preview — stretch to match right panel height, video centered */}
+        <div className="lg:w-2/3 flex">
           <LivePreview />
         </div>
-        <div className="lg:w-1/3">
+
+        {/* Right: Stats + Chart stacked */}
+        <div className="lg:w-1/3 flex flex-col gap-4">
           <StatsPanel />
+          <TimeChart />
         </div>
       </div>
 
-      {/* Chart */}
-      <TimeChart />
+      {/* Footer */}
+      <footer className="text-center py-3 text-xs text-[var(--color-muted)] font-[family-name:var(--font-body)] border-t border-[var(--color-border)]">
+        &copy; 2026, Target Group
+      </footer>
     </div>
   )
 }
