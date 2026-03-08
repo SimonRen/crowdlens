@@ -1,5 +1,5 @@
 """
-Smoke test for the Live Feed Monitor.
+Smoke test for the CrowdLens.
 Requires: docker compose up running + at least one MP4 in ./videos/
 
 Run: python tests/test_smoke.py
@@ -77,7 +77,7 @@ def test_session_lifecycle(channel_id: str):
 
 
 def main():
-    print("=== Live Feed Monitor Smoke Test ===\n")
+    print("=== CrowdLens Smoke Test ===\n")
     try:
         test_health()
         channels = test_channels()

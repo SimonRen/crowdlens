@@ -14,7 +14,7 @@ def test_default_config():
     importlib.reload(config)
     settings = config.get_settings()
 
-    assert settings.detection_model == "yolo11n"
+    assert settings.detection_model == "yolo26n"
     assert settings.child_age_threshold == 13
     assert settings.classification_interval == 3
     assert settings.jpeg_quality == 70

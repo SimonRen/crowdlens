@@ -16,7 +16,7 @@ echo "=== CrowdLens ==="
 echo "Starting backend on :8000..."
 cd backend
 source .venv/bin/activate
-python main.py &
+DATABASE_PATH=../data/monitor.db VIDEOS_DIR=../videos python main.py &
 BACKEND_PID=$!
 cd ..
 
