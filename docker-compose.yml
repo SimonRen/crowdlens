@@ -1,0 +1,24 @@
+services:
+  backend:
+    build: ./backend
+    volumes:
+      - ./videos:/app/videos
+      - ./data:/app/data
+    environment:
+      - DETECTION_MODEL=yolo11n
+      - CHILD_AGE_THRESHOLD=13
+      - CLASSIFICATION_INTERVAL=3
+      - JPEG_QUALITY=70
+      - SNAPSHOT_INTERVAL=5
+      - INPUT_RESOLUTION=640
+      - DATABASE_PATH=/app/data/monitor.db
+      - VIDEOS_DIR=/app/videos
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    restart: unless-stopped

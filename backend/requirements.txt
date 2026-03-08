@@ -1,0 +1,11 @@
+fastapi>=0.135.0
+uvicorn[standard]>=0.32.0
+ultralytics>=8.3.0
+onnxruntime>=1.18.0
+opencv-python-headless>=4.9.0
+numpy<2.0
+insightface>=0.7.3
+supervision>=0.24.0
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
+lapx>=0.5.0
