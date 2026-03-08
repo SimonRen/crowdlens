@@ -11,6 +11,8 @@ services:
       - JPEG_QUALITY=70
       - SNAPSHOT_INTERVAL=5
       - INPUT_RESOLUTION=640
+      - MAX_FPS=30
+      - DEVICE=cpu
       - DATABASE_PATH=/app/data/monitor.db
       - VIDEOS_DIR=/app/videos
     restart: unless-stopped

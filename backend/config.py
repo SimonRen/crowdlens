@@ -10,8 +10,19 @@ class Settings(BaseSettings):
     snapshot_interval: int = 5
     input_resolution: int = 640
     max_fps: int = 30
+    device: str = "auto"  # "auto", "mps", "cuda", "cpu"
     database_path: str = "/app/data/monitor.db"
     videos_dir: str = "/app/videos"
+
+    def resolve_device(self) -> str:
+        import torch
+        if self.device != "auto":
+            return self.device
+        if torch.backends.mps.is_available():
+            return "mps"
+        if torch.cuda.is_available():
+            return "cuda"
+        return "cpu"
 
     model_config = {"env_prefix": ""}
 

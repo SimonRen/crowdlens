@@ -6,9 +6,9 @@ from transformers import AutoModelForImageClassification, AutoConfig, AutoImageP
 class PersonClassifier:
     """MiVOLO V2 age+gender classifier. Works from full body crops — no face needed."""
 
-    def __init__(self, child_age_threshold: int = 13):
+    def __init__(self, child_age_threshold: int = 13, device: str = "cpu"):
         self.child_age_threshold = child_age_threshold
-        self._device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
+        self._device = torch.device(device)
 
         self.config = AutoConfig.from_pretrained(
             "iitolstykh/mivolo_v2", trust_remote_code=True,

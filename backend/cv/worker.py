@@ -59,11 +59,13 @@ def cv_worker(
     settings = Settings(**settings_dict)
 
     # Initialize components
+    device = settings.resolve_device()
     detector = PersonDetector(
         model_name=f"{settings.detection_model}.pt",
         input_size=settings.input_resolution,
+        device=device,
     )
-    classifier = PersonClassifier(child_age_threshold=settings.child_age_threshold)
+    classifier = PersonClassifier(child_age_threshold=settings.child_age_threshold, device=device)
     annotator = FrameAnnotator()
 
     # Initialize DB (own connection for this process)

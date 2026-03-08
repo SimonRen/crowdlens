@@ -2,10 +2,11 @@ import numpy as np
 
 
 class PersonDetector:
-    def __init__(self, model_name: str = "yolo26n.pt", input_size: int = 640):
+    def __init__(self, model_name: str = "yolo26n.pt", input_size: int = 640, device: str = "cpu"):
         from ultralytics import YOLO
         self.model = YOLO(model_name)
         self.input_size = input_size
+        self.device = device
 
     def detect_and_track(self, frame: np.ndarray) -> dict:
         """Run detection + tracking on a frame.
@@ -20,7 +21,7 @@ class PersonDetector:
             conf=0.5,
             iou=0.7,
             imgsz=self.input_size,
-            device="mps" if __import__("torch").backends.mps.is_available() else "cpu",
+            device=self.device,
             verbose=False,
         )
         result = results[0]
