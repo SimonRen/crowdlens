@@ -74,6 +74,8 @@ def cv_worker(
     cap = None
     session_id = None
     frame_count = 0
+    frame_interval = 1.0 / settings.max_fps
+    next_frame_time = 0.0
     classifications: dict[int, dict] = {}  # track_id -> best classification
     vote_history: dict[int, list[str]] = {}  # track_id -> list of classification votes
     last_snapshot_time = 0.0
@@ -90,6 +92,10 @@ def cv_worker(
                     channel = cmd["channel"]
                     video_path = f"{settings.videos_dir}/{channel['filename']}"
                     cap = cv2.VideoCapture(video_path)
+                    video_fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+                    target_fps = min(video_fps, settings.max_fps)
+                    frame_interval = 1.0 / target_fps
+                    next_frame_time = time.time()
                     session_id = cmd["session_id"]
                     frame_count = 0
                     classifications.clear()
@@ -111,6 +117,13 @@ def cv_worker(
                 time.sleep(0.05)
                 continue
 
+            # Frame pacing — wait until next frame time for stable playback
+            now = time.time()
+            sleep_dur = next_frame_time - now
+            if sleep_dur > 0:
+                time.sleep(sleep_dur)
+            next_frame_time = time.time() + frame_interval
+
             ret, frame = cap.read()
             if not ret:
                 # Loop the video — reset tracker and classifications to avoid
@@ -119,6 +132,7 @@ def cv_worker(
                 detector.reset_tracker()
                 classifications.clear()
                 vote_history.clear()
+                next_frame_time = time.time()
                 continue
 
             frame_count += 1

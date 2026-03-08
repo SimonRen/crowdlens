@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     jpeg_quality: int = 70
     snapshot_interval: int = 5
     input_resolution: int = 640
+    max_fps: int = 30
     database_path: str = "/app/data/monitor.db"
     videos_dir: str = "/app/videos"
 

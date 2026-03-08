@@ -20,6 +20,7 @@ class PersonDetector:
             conf=0.5,
             iou=0.7,
             imgsz=self.input_size,
+            device="mps" if __import__("torch").backends.mps.is_available() else "cpu",
             verbose=False,
         )
         result = results[0]

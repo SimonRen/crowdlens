@@ -8,14 +8,16 @@ class PersonClassifier:
 
     def __init__(self, child_age_threshold: int = 13):
         self.child_age_threshold = child_age_threshold
+        self._device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
 
         self.config = AutoConfig.from_pretrained(
             "iitolstykh/mivolo_v2", trust_remote_code=True,
         )
         self.model = AutoModelForImageClassification.from_pretrained(
-            "iitolstykh/mivolo_v2", trust_remote_code=True, torch_dtype=torch.float16,
+            "iitolstykh/mivolo_v2", trust_remote_code=True, dtype=torch.float32,
         )
         self.model.eval()
+        self.model.to(self._device)
         self.processor = AutoImageProcessor.from_pretrained(
             "iitolstykh/mivolo_v2", trust_remote_code=True,
         )
@@ -48,9 +50,13 @@ class PersonClassifier:
         body_input = self.processor(images=valid_crops)["pixel_values"]
         body_input = body_input.to(dtype=self.model.dtype, device=self.model.device)
 
-        # MiVOLO accepts body_input without face_input
+        # MiVOLO V2 with_persons_model expects 6-channel input (face + body concat).
+        # When no face crop is available, pass zeros for the face channels.
+        faces_input = torch.zeros_like(body_input)
+        concat_input = torch.cat((faces_input, body_input), dim=1)
+
         with torch.no_grad():
-            output = self.model(body_input=body_input)
+            output = self.model(concat_input=concat_input)
 
         for j, idx in enumerate(valid_indices):
             age = output.age_output[j].item()
