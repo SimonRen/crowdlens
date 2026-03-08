@@ -35,6 +35,8 @@ All settings are environment variables in `docker-compose.yml`:
 | `DETECTION_MODEL` | `yolo26n` | YOLO model name |
 | `CHILD_AGE_THRESHOLD` | `13` | Age below this = "child" |
 | `CLASSIFICATION_INTERVAL` | `3` | Classify every N frames |
+| `GENDER_CONFIDENCE_THRESHOLD` | `0.6` | Min confidence for gender; below → "unknown" |
+| `MIN_CROP_HEIGHT` | `80` | Skip person crops shorter than this (px) |
 | `JPEG_QUALITY` | `70` | MJPEG stream quality (1-100) |
 | `SNAPSHOT_INTERVAL` | `5` | DB snapshot interval (seconds) |
 | `INPUT_RESOLUTION` | `640` | YOLO input resolution |

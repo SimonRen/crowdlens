@@ -65,7 +65,12 @@ def cv_worker(
         input_size=settings.input_resolution,
         device=device,
     )
-    classifier = PersonClassifier(child_age_threshold=settings.child_age_threshold, device=device)
+    classifier = PersonClassifier(
+        child_age_threshold=settings.child_age_threshold,
+        gender_confidence_threshold=settings.gender_confidence_threshold,
+        min_crop_height=settings.min_crop_height,
+        device=device,
+    )
     annotator = FrameAnnotator()
 
     # Initialize DB (own connection for this process)

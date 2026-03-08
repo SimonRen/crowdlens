@@ -21,3 +21,5 @@ export const startSession = (channel_id: string) =>
   api.post('sessions/start', { json: { channel_id } }).json<{ session_id: string }>()
 export const stopSession = (session_id: string) =>
   api.post('sessions/stop', { json: { session_id } }).json<{ session_id: string }>()
+export const resetSystem = () =>
+  api.post('reset').json<{ status: string; stopped_sessions: number }>()

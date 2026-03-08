@@ -6,8 +6,11 @@ from transformers import AutoModelForImageClassification, AutoConfig, AutoImageP
 class PersonClassifier:
     """MiVOLO V2 age+gender classifier. Works from full body crops — no face needed."""
 
-    def __init__(self, child_age_threshold: int = 13, device: str = "cpu"):
+    def __init__(self, child_age_threshold: int = 13, gender_confidence_threshold: float = 0.6,
+                 min_crop_height: int = 80, device: str = "cpu"):
         self.child_age_threshold = child_age_threshold
+        self.gender_confidence_threshold = gender_confidence_threshold
+        self.min_crop_height = min_crop_height
         self._device = torch.device(device)
 
         self.config = AutoConfig.from_pretrained(
@@ -37,7 +40,7 @@ class PersonClassifier:
         valid_crops: list[np.ndarray] = []
 
         for i, crop in enumerate(crops):
-            if crop.shape[0] < 40 or crop.shape[1] < 20:
+            if crop.shape[0] < self.min_crop_height or crop.shape[1] < 20:
                 continue
             # BGR → RGB for processor
             valid_crops.append(crop[:, :, ::-1].copy())
@@ -67,6 +70,8 @@ class PersonClassifier:
             # Derive classification from age + gender
             if age < self.child_age_threshold:
                 classification = "child"
+            elif gender_prob < self.gender_confidence_threshold:
+                classification = "unknown"
             elif gender.lower() in ("male", "man"):
                 classification = "man"
             else:

@@ -36,6 +36,11 @@ def stop_session(conn: sqlite3.Connection, session_id: str):
     conn.commit()
 
 
+def list_active_sessions(conn: sqlite3.Connection) -> list[dict]:
+    rows = conn.execute("SELECT * FROM sessions WHERE status = 'active'").fetchall()
+    return [dict(r) for r in rows]
+
+
 def list_sessions(conn: sqlite3.Connection) -> list[dict]:
     rows = conn.execute("SELECT * FROM sessions ORDER BY started_at DESC").fetchall()
     return [dict(r) for r in rows]

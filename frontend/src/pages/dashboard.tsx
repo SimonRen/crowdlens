@@ -5,7 +5,7 @@ import { StatsPanel } from '../components/stats-panel'
 import { TimeChart } from '../components/time-chart'
 import { useSSE } from '../hooks/use-sse'
 import { useMonitorStore } from '../stores/monitor'
-import { startSession, stopSession } from '../lib/api'
+import { startSession, stopSession, resetSystem } from '../lib/api'
 
 export function Dashboard() {
   const [channelId, setChannelId] = useState('')
@@ -41,6 +41,19 @@ export function Dashboard() {
     }
   }
 
+  const handleReset = async () => {
+    setLoading(true)
+    try {
+      await resetSystem()
+      setSessionId(null)
+      clearSession()
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return (
     <div className="flex flex-col p-4 min-h-[calc(100vh-49px)] gap-4">
       {/* Top bar */}
@@ -48,7 +61,7 @@ export function Dashboard() {
         <div className="flex items-center gap-3">
           <ChannelSelector value={channelId} onChange={setChannelId} />
         </div>
-        <div>
+        <div className="flex items-center gap-2">
           {sessionId ? (
             <button
               onClick={handleStop}
@@ -66,6 +79,13 @@ export function Dashboard() {
               {loading ? 'Starting...' : 'Start Monitoring'}
             </button>
           )}
+          <button
+            onClick={handleReset}
+            disabled={loading}
+            className="border border-[var(--color-border)] hover:bg-[var(--color-surface)] text-[var(--color-muted)] hover:text-[var(--color-text)] px-4 py-2 rounded-lg font-semibold font-[family-name:var(--font-body)] cursor-pointer transition-colors duration-200 disabled:opacity-50"
+          >
+            Reset
+          </button>
         </div>
       </div>
 

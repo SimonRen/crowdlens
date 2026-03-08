@@ -66,6 +66,24 @@ async def stop_session(req: StopSessionRequest, request: Request):
     return {"session_id": req.session_id, "status": "stopped"}
 
 
+@router.post("/reset")
+async def reset_system(request: Request):
+    """Stop any active session and reset the CV worker to idle."""
+    db = request.app.state.db
+    cmd_queue = request.app.state.cmd_queue
+
+    # Stop all active sessions in DB
+    active = queries.list_active_sessions(db)
+    for s in active:
+        queries.stop_session(db, s["id"])
+
+    # Tell CV worker to stop processing
+    loop = asyncio.get_running_loop()
+    await loop.run_in_executor(None, cmd_queue.put, {"type": "stop"})
+
+    return {"status": "reset", "stopped_sessions": len(active)}
+
+
 @router.get("/sessions")
 async def list_sessions(request: Request):
     return queries.list_sessions(request.app.state.db)

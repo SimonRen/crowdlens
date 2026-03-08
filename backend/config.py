@@ -6,6 +6,8 @@ class Settings(BaseSettings):
     detection_model: str = "yolo26n"
     child_age_threshold: int = 13
     classification_interval: int = 3
+    gender_confidence_threshold: float = 0.6  # below this → "unknown"
+    min_crop_height: int = 80  # skip crops shorter than this (px)
     jpeg_quality: int = 70
     snapshot_interval: int = 5
     input_resolution: int = 640
