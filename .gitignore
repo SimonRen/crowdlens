@@ -1,6 +1,5 @@
 # Data
 data/
-videos/*.mp4
 
 # Models
 *.pt
