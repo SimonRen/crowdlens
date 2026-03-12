@@ -7,14 +7,16 @@ CLASS_COLORS = {
     "woman": sv.Color.from_hex("#EC4899"),
     "child": sv.Color.from_hex("#22C55E"),
     "unknown": sv.Color.from_hex("#6B7280"),
+    "match": sv.Color.from_hex("#EF4444"),
 }
 
-CLASS_TO_ID = {"man": 0, "woman": 1, "child": 2, "unknown": 3}
+CLASS_TO_ID = {"man": 0, "woman": 1, "child": 2, "unknown": 3, "match": 4}
 PALETTE = sv.ColorPalette([
     sv.Color.from_hex("#3B82F6"),  # man = blue
     sv.Color.from_hex("#EC4899"),  # woman = pink
     sv.Color.from_hex("#22C55E"),  # child = green
     sv.Color.from_hex("#6B7280"),  # unknown = gray
+    sv.Color.from_hex("#EF4444"),  # match = red
 ])
 
 
@@ -55,7 +57,10 @@ class FrameAnnotator:
 
             new_class_ids.append(CLASS_TO_ID.get(cls, 3))
 
-            if cls == "unknown":
+            if cls == "match":
+                similarity = info.get("similarity", 0)
+                labels.append(f"MATCH #{tid} {similarity:.0%}")
+            elif cls == "unknown":
                 labels.append(f"Person #{tid}")
             else:
                 age = info.get("age")
