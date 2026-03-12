@@ -18,7 +18,11 @@ RUN apt-get update && \
 
 COPY --from=builder /install /usr/local
 
-# Pre-download YOLO model (into WORKDIR so detector finds it)
+# Install mivolo module (needed by HuggingFace model's custom code, deps already satisfied)
+RUN pip install --no-cache-dir --no-deps \
+    https://github.com/WildChlamydia/MiVOLO/archive/refs/heads/main.tar.gz
+
+# Pre-download YOLO model
 ADD https://github.com/ultralytics/assets/releases/download/v8.4.0/yolo26n.pt /app/yolo26n.pt
 
 # Pre-download MiVOLO V2 model

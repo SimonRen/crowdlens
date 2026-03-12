@@ -7,22 +7,24 @@ services:
     environment:
       - DETECTION_MODEL=yolo26n
       - CHILD_AGE_THRESHOLD=13
-      - CLASSIFICATION_INTERVAL=3
+      - CLASSIFICATION_INTERVAL=10
       - GENDER_CONFIDENCE_THRESHOLD=0.6
       - MIN_CROP_HEIGHT=80
-      - JPEG_QUALITY=70
+      - JPEG_QUALITY=50
       - SNAPSHOT_INTERVAL=5
-      - INPUT_RESOLUTION=640
+      - INPUT_RESOLUTION=416
       - MAX_FPS=30
       - DEVICE=cpu
       - DATABASE_PATH=/app/data/monitor.db
       - VIDEOS_DIR=/app/videos
+      - OMP_NUM_THREADS=8
+      - MKL_NUM_THREADS=8
     restart: unless-stopped
 
   frontend:
     build: ./frontend
     ports:
-      - "3000:80"
+      - "${HOST_PORT:-3000}:80"
     depends_on:
       - backend
     restart: unless-stopped
