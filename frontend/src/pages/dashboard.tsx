@@ -3,6 +3,8 @@ import { ChannelSelector } from '../components/channel-selector'
 import { LivePreview } from '../components/live-preview'
 import { StatsPanel } from '../components/stats-panel'
 import { TimeChart } from '../components/time-chart'
+import { TargetSearchPanel } from '../components/target-search'
+import { MatchOverlay } from '../components/match-overlay'
 import { useSSE } from '../hooks/use-sse'
 import { useMonitorStore } from '../stores/monitor'
 import { startSession, stopSession, resetSystem } from '../lib/api'
@@ -92,12 +94,14 @@ export function Dashboard() {
       {/* Main area: video left (stretch to match right), stats + chart right */}
       <div className="flex flex-col lg:flex-row gap-4 flex-1">
         {/* Left: Live preview — stretch to match right panel height, video centered */}
-        <div className="lg:w-2/3 flex">
+        <div className="lg:w-2/3 flex relative">
           <LivePreview />
+          <MatchOverlay />
         </div>
 
         {/* Right: Stats + Chart stacked */}
         <div className="lg:w-1/3 flex flex-col gap-4">
+          <TargetSearchPanel />
           <StatsPanel />
           <TimeChart />
         </div>
