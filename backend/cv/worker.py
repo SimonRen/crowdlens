@@ -48,6 +48,7 @@ def cv_worker(
     frame_queue: mp.Queue,
     stats_queue: mp.Queue,
     cmd_queue: mp.Queue,
+    match_queue: mp.Queue,
     stop_event: mp.Event,
     settings_dict: dict,
 ):
@@ -90,6 +91,13 @@ def cv_worker(
     fps_time = time.time()
     current_fps = 0.0
 
+    # Target search state
+    target_embedding = None  # np.ndarray or None
+    match_threshold = settings.match_threshold
+    match_paused = False
+    frozen_frame_jpeg = None  # JPEG bytes to re-push during MATCH_PAUSED
+    face_matcher = None  # lazy-loaded
+
     try:
         while not stop_event.is_set():
             # Check for commands
@@ -116,12 +124,38 @@ def cv_worker(
                     session_id = None
                     classifications.clear()
                     vote_history.clear()
+                elif cmd["type"] == "set_target":
+                    target_embedding = np.array(cmd["embedding"], dtype=np.float32)
+                    match_threshold = cmd["threshold"]
+                    match_paused = False
+                    if face_matcher is None:
+                        from cv.face_matcher import FaceMatcher
+                        face_matcher = FaceMatcher(
+                            model_name=settings.face_model_name,
+                            device=device,
+                        )
+                elif cmd["type"] == "clear_target":
+                    target_embedding = None
+                    match_paused = False
+                    frozen_frame_jpeg = None
+                elif cmd["type"] == "update_threshold":
+                    match_threshold = cmd["threshold"]
+                elif cmd["type"] == "resume":
+                    match_paused = False
+                    frozen_frame_jpeg = None
             except queue.Empty:
                 pass
 
             # If no active session, sleep briefly and continue
             if cap is None or session_id is None:
                 time.sleep(0.05)
+                continue
+
+            # MATCH_PAUSED: re-push frozen frame, check for resume
+            if match_paused:
+                if frozen_frame_jpeg is not None:
+                    put_drop_oldest(frame_queue, frozen_frame_jpeg)
+                time.sleep(frame_interval)
                 continue
 
             # Frame pacing — wait until next frame time for stable playback
@@ -229,10 +263,56 @@ def cv_worker(
             detections = sv.Detections.from_ultralytics(det["result"])
             annotated = annotator.annotate(frame, detections, classifications)
 
+            # Face matching (on same interval as classification)
+            matched_tid = None
+            if target_embedding is not None and run_classification:
+                for tid, box in zip(track_ids, boxes):
+                    x1, y1, x2, y2 = box.astype(int)
+                    crop = frame[y1:y2, x1:x2]
+                    if crop.shape[0] < settings.min_crop_height or crop.shape[1] < 20:
+                        continue
+                    emb = face_matcher.extract_embedding(crop)
+                    if emb is None:
+                        continue
+                    similarity = face_matcher.compare(emb, target_embedding)
+                    if similarity >= match_threshold:
+                        matched_tid = tid
+                        # Override classification for annotation
+                        classifications[tid] = {
+                            "classification": "match",
+                            "similarity": similarity,
+                            "confidence": similarity,
+                            "age": classifications.get(tid, {}).get("age"),
+                        }
+                        # Re-annotate with match highlight
+                        annotated = annotator.annotate(frame, detections, classifications)
+                        break  # first match wins
+
             # 4. Encode JPEG and push to frame queue
             _, jpeg = cv2.imencode(".jpg", annotated,
                                     [cv2.IMWRITE_JPEG_QUALITY, settings.jpeg_quality])
             put_drop_oldest(frame_queue, jpeg.tobytes())
+
+            # If match found, send match event and enter MATCH_PAUSED
+            if matched_tid is not None:
+                import base64 as b64
+                x1, y1, x2, y2 = boxes[track_ids.index(matched_tid)].astype(int)
+                crop_bgr = frame[y1:y2, x1:x2]
+                _, crop_jpg = cv2.imencode(".jpg", crop_bgr, [cv2.IMWRITE_JPEG_QUALITY, 90])
+
+                match_event = {
+                    "type": "match",
+                    "track_id": matched_tid,
+                    "similarity": round(classifications[matched_tid]["similarity"], 4),
+                    "frame_jpeg": b64.b64encode(jpeg.tobytes()).decode("ascii"),
+                    "crop_jpeg": b64.b64encode(crop_jpg.tobytes()).decode("ascii"),
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                }
+                put_drop_oldest(match_queue, match_event)
+
+                frozen_frame_jpeg = jpeg.tobytes()
+                match_paused = True
+                continue  # skip stats push, enter pause on next iteration
 
             # 5. Compute current stats and push
             in_frame = {"men": 0, "women": 0, "children": 0, "unknown": 0}
