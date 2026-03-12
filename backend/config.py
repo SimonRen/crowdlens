@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     device: str = "auto"  # "auto", "mps", "cuda", "cpu"
     database_path: str = "/app/data/monitor.db"
     videos_dir: str = "/app/videos"
+    match_threshold: float = 0.5  # cosine similarity threshold for face matching
+    face_model_name: str = "buffalo_sc"  # insightface model pack name
 
     def resolve_device(self) -> str:
         import torch
