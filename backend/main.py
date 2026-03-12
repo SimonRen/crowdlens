@@ -19,6 +19,7 @@ async def lifespan(app: FastAPI):
 
     # Ensure data directory exists
     os.makedirs(os.path.dirname(settings.database_path), exist_ok=True)
+    os.makedirs(os.path.join(os.path.dirname(settings.database_path), "target"), exist_ok=True)
 
     # Init DB for API process (read-only usage)
     db = init_db(settings.database_path)
@@ -35,11 +36,12 @@ async def lifespan(app: FastAPI):
     frame_queue = ctx.Queue(maxsize=2)
     stats_queue = ctx.Queue(maxsize=4)
     cmd_queue = ctx.Queue(maxsize=10)
+    match_queue = ctx.Queue(maxsize=4)
     stop_event = ctx.Event()
 
     worker = ctx.Process(
         target=cv_worker,
-        args=(frame_queue, stats_queue, cmd_queue, stop_event, settings.model_dump()),
+        args=(frame_queue, stats_queue, cmd_queue, match_queue, stop_event, settings.model_dump()),
         daemon=True,
     )
     worker.start()
@@ -49,11 +51,14 @@ async def lifespan(app: FastAPI):
     app.state.cmd_queue = cmd_queue
     app.state.worker = worker
     app.state.stop_event = stop_event
+    app.state.match_queue = match_queue
 
     # StreamHub: caches latest frame/stats, fans out to multiple HTTP clients
     from api.stream_hub import StreamHub
-    hub = StreamHub(frame_queue, stats_queue)
+    hub = StreamHub(frame_queue, stats_queue, match_queue)
     app.state.hub = hub
+    app.state.target_active = False
+    app.state.target_threshold = 0.5
 
     yield
 
@@ -65,7 +70,7 @@ async def lifespan(app: FastAPI):
         worker.terminate()
         worker.join(timeout=2)
 
-    for q in (frame_queue, stats_queue, cmd_queue):
+    for q in (frame_queue, stats_queue, cmd_queue, match_queue):
         while not q.empty():
             try:
                 q.get_nowait()
