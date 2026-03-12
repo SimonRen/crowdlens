@@ -31,6 +31,11 @@ RUN python -c "from transformers import AutoModelForImageClassification, AutoCon
     AutoModelForImageClassification.from_pretrained('iitolstykh/mivolo_v2', trust_remote_code=True); \
     AutoImageProcessor.from_pretrained('iitolstykh/mivolo_v2', trust_remote_code=True)"
 
+# Pre-download InsightFace buffalo_sc model
+RUN python -c "from insightface.app import FaceAnalysis; \
+    app = FaceAnalysis(name='buffalo_sc', providers=['CPUExecutionProvider']); \
+    app.prepare(ctx_id=0, det_size=(320, 320))"
+
 WORKDIR /app
 COPY . .
 

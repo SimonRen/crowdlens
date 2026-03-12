@@ -17,6 +17,8 @@ services:
       - DEVICE=cpu
       - DATABASE_PATH=/app/data/monitor.db
       - VIDEOS_DIR=/app/videos
+      - FACE_MODEL_NAME=buffalo_sc
+      - MATCH_THRESHOLD=0.5
       - OMP_NUM_THREADS=8
       - MKL_NUM_THREADS=8
     restart: unless-stopped
