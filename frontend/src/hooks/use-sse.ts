@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { useMonitorStore } from '../stores/monitor'
-import type { StatsEvent } from '../lib/api'
+import type { StatsEvent, MatchEvent } from '../lib/api'
 
 export function useSSE() {
   const { setStats, setConnected } = useMonitorStore()
@@ -18,6 +18,14 @@ export function useSSE() {
         setStats(data)
       }
       setConnected(true)
+    })
+
+    es.addEventListener('match', (e) => {
+      const data: MatchEvent = JSON.parse(e.data)
+      const currentSessionId = useMonitorStore.getState().sessionId
+      if (currentSessionId) {
+        useMonitorStore.getState().setMatchResult(data)
+      }
     })
 
     es.onerror = () => {
