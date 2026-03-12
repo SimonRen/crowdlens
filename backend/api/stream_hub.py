@@ -1,5 +1,6 @@
 import queue
 import threading
+from collections import deque
 
 import anyio
 
@@ -8,8 +9,8 @@ class StreamHub:
     """Consumes from multiprocessing.Queue and caches latest frame/stats.
     Multiple HTTP clients poll the latest data via version counters (fan-out).
 
-    Match events use a dedicated queue to avoid being overwritten by
-    the latest-value sampling pattern used for stats.
+    Match events use a dedicated queue with a deque buffer to avoid being
+    overwritten by the latest-value sampling pattern used for stats.
     """
 
     def __init__(self, frame_queue, stats_queue, match_queue=None):
@@ -18,10 +19,11 @@ class StreamHub:
         self._match_queue = match_queue
         self.latest_frame: bytes | None = None
         self.latest_stats: dict | None = None
-        self.latest_match: dict | None = None
+        self._match_buffer: deque[dict] = deque(maxlen=16)
         self._frame_version = 0
         self._stats_version = 0
         self._match_version = 0
+        self._match_lock = threading.Lock()
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._drain_loop, daemon=True)
         self._thread.start()
@@ -44,7 +46,9 @@ class StreamHub:
                 pass
             if self._match_queue is not None:
                 try:
-                    self.latest_match = self._match_queue.get_nowait()
+                    match = self._match_queue.get_nowait()
+                    with self._match_lock:
+                        self._match_buffer.append(match)
                     self._match_version += 1
                     got_something = True
                 except queue.Empty:
@@ -77,7 +81,11 @@ class StreamHub:
         return self.latest_stats
 
     async def wait_match(self) -> dict | None:
-        """Wait for a new match event. Returns None if timeout (no match)."""
+        """Wait for a new match event. Returns None if timeout (no match).
+
+        Uses a deque buffer so match events are never lost, even with
+        multiple SSE clients or rapid arrivals.
+        """
         version = self._match_version
         deadline = 1.0  # short poll — match events are rare
         waited = 0.0
@@ -86,9 +94,10 @@ class StreamHub:
                 return None  # no match — return None, not stale data
             await anyio.sleep(0.05)
             waited += 0.05
-        match = self.latest_match
-        self.latest_match = None  # consume once
-        return match
+        with self._match_lock:
+            if self._match_buffer:
+                return self._match_buffer.popleft()
+        return None
 
     def stop(self):
         self._stop.set()

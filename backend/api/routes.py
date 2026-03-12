@@ -5,7 +5,7 @@ import cv2
 import numpy as np
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from config import get_settings
 from cv.channels import scan_videos_dir
@@ -125,7 +125,7 @@ def _target_dir() -> str:
 
 
 class ThresholdRequest(BaseModel):
-    threshold: float
+    threshold: float = Field(ge=0.0, le=1.0)
 
 
 @router.post("/target/upload")
@@ -135,6 +135,9 @@ async def upload_target(
     threshold: float = Form(0.5),
 ):
     """Upload a target photo. Extracts face embedding and notifies the worker."""
+    if not (0.0 <= threshold <= 1.0):
+        raise HTTPException(status_code=400, detail="Threshold must be between 0 and 1")
+
     contents = await file.read()
     arr = np.frombuffer(contents, np.uint8)
     image = cv2.imdecode(arr, cv2.IMREAD_COLOR)

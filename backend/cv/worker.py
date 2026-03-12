@@ -1,3 +1,4 @@
+import base64 as b64
 import multiprocessing as mp
 import queue
 import signal
@@ -122,6 +123,8 @@ def cv_worker(
                         cap.release()
                         cap = None
                     session_id = None
+                    match_paused = False
+                    frozen_frame_jpeg = None
                     classifications.clear()
                     vote_history.clear()
                 elif cmd["type"] == "set_target":
@@ -265,7 +268,8 @@ def cv_worker(
 
             # Face matching (on same interval as classification)
             matched_tid = None
-            if target_embedding is not None and run_classification:
+            matched_box = None
+            if target_embedding is not None and face_matcher is not None and run_classification:
                 for tid, box in zip(track_ids, boxes):
                     x1, y1, x2, y2 = box.astype(int)
                     crop = frame[y1:y2, x1:x2]
@@ -277,6 +281,7 @@ def cv_worker(
                     similarity = face_matcher.compare(emb, target_embedding)
                     if similarity >= match_threshold:
                         matched_tid = tid
+                        matched_box = box.astype(int)
                         # Override classification for annotation
                         classifications[tid] = {
                             "classification": "match",
@@ -295,8 +300,7 @@ def cv_worker(
 
             # If match found, send match event and enter MATCH_PAUSED
             if matched_tid is not None:
-                import base64 as b64
-                x1, y1, x2, y2 = boxes[track_ids.index(matched_tid)].astype(int)
+                x1, y1, x2, y2 = matched_box
                 crop_bgr = frame[y1:y2, x1:x2]
                 _, crop_jpg = cv2.imencode(".jpg", crop_bgr, [cv2.IMWRITE_JPEG_QUALITY, 90])
 

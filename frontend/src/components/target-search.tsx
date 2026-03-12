@@ -40,6 +40,8 @@ export function TargetSearchPanel() {
 
   const handleThresholdChange = (value: number) => {
     setTargetThreshold(value)
+    // Only send API call when target is active
+    if (!targetActive) return
     // Debounce the API call
     if (debounceRef.current) clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(() => {
