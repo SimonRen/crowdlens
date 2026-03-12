@@ -109,7 +109,7 @@ export function Dashboard() {
 
       {/* Footer */}
       <footer className="text-center py-3 text-xs text-[var(--color-muted)] font-[family-name:var(--font-body)] border-t border-[var(--color-border)]">
-        &copy; 2026, Target Group
+        &copy; 2026, Target Group &middot; Build: {__BUILD_TIME__}
       </footer>
     </div>
   )

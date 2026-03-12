@@ -1,18 +1,20 @@
 import { useState } from 'react'
 import { useMonitorStore } from '../stores/monitor'
-import { resumeAfterMatch } from '../lib/api'
+import { resumeAfterMatch, clearTarget as clearTargetApi } from '../lib/api'
 
 export function MatchOverlay() {
-  const { matchResult, targetThumbnailUrl, setMatchResult } = useMonitorStore()
+  const { matchResult, targetActive, targetThumbnailUrl, clearTarget } = useMonitorStore()
   const [resuming, setResuming] = useState(false)
 
-  if (!matchResult) return null
+  // Only show overlay when there's a match and target is still active (not yet resumed)
+  if (!matchResult || !targetActive) return null
 
   const handleResume = async () => {
     setResuming(true)
     try {
       await resumeAfterMatch()
-      setMatchResult(null)
+      await clearTargetApi()
+      clearTarget() // deactivates target but keeps matchResult
     } catch (err) {
       console.error(err)
     } finally {
@@ -61,7 +63,7 @@ export function MatchOverlay() {
             <img
               src={`data:image/jpeg;base64,${matchResult.crop_jpeg}`}
               alt="Matched person"
-              className="w-24 h-24 rounded-lg object-cover border-2 border-red-500/50"
+              className="w-24 max-h-40 rounded-lg object-contain border-2 border-red-500/50"
             />
             <span className="text-[10px] text-[var(--color-muted)] font-[family-name:var(--font-body)]">
               Detected

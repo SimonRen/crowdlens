@@ -49,5 +49,5 @@ export const useMonitorStore = create<MonitorState>((set) => ({
   setTargetThreshold: (threshold) => set({ targetThreshold: threshold }),
   setMatchResult: (result) => set({ matchResult: result }),
   clearTarget: () =>
-    set({ targetActive: false, targetThumbnailUrl: null, matchResult: null }),
+    set({ targetActive: false, targetThumbnailUrl: null }),
 }))

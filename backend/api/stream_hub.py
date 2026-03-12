@@ -86,6 +86,12 @@ class StreamHub:
         Uses a deque buffer so match events are never lost, even with
         multiple SSE clients or rapid arrivals.
         """
+        # Drain any buffered events first — they may have arrived while
+        # we were blocked in wait_stats() on the previous loop iteration.
+        with self._match_lock:
+            if self._match_buffer:
+                return self._match_buffer.popleft()
+
         version = self._match_version
         deadline = 1.0  # short poll — match events are rare
         waited = 0.0
