@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ChannelSelector } from '../components/channel-selector'
+import { Link, useParams } from '@tanstack/react-router'
 import { LivePreview } from '../components/live-preview'
 import { StatsPanel } from '../components/stats-panel'
 import { TimeChart } from '../components/time-chart'
@@ -10,25 +10,11 @@ import { useMonitorStore } from '../stores/monitor'
 import { startSession, stopSession, resetSystem } from '../lib/api'
 
 export function Dashboard() {
-  const [channelId, setChannelId] = useState('')
+  const { channelId } = useParams({ from: '/$channelId' })
   const { sessionId, setSessionId, clearSession } = useMonitorStore()
   const [loading, setLoading] = useState(false)
 
   useSSE()
-
-  const handleStart = async () => {
-    if (!channelId) return
-    setLoading(true)
-    try {
-      clearSession()
-      const res = await startSession(channelId)
-      setSessionId(res.session_id)
-    } catch (err) {
-      console.error(err)
-    } finally {
-      setLoading(false)
-    }
-  }
 
   const handleStop = async () => {
     if (!sessionId) return
@@ -36,6 +22,19 @@ export function Dashboard() {
     try {
       await stopSession(sessionId)
       setSessionId(null)
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleStart = async () => {
+    setLoading(true)
+    try {
+      clearSession()
+      const res = await startSession(channelId)
+      setSessionId(res.session_id)
     } catch (err) {
       console.error(err)
     } finally {
@@ -57,13 +56,23 @@ export function Dashboard() {
   }
 
   return (
-    <div className="flex flex-col p-4 min-h-[calc(100vh-49px)] gap-4">
-      {/* Top bar */}
-      <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg px-4 py-3 flex items-center justify-between gap-4 flex-wrap">
-        <div className="flex items-center gap-3">
-          <ChannelSelector value={channelId} onChange={setChannelId} />
-        </div>
-        <div className="flex items-center gap-2">
+    <>
+      {/* Nav bar with back link */}
+      <nav className="bg-[var(--color-surface)] border-b border-[var(--color-border)] px-4 py-3 flex items-center gap-4">
+        <Link
+          to="/"
+          className="text-lg font-bold font-[family-name:var(--font-heading)] text-[var(--color-accent)] hover:opacity-80 transition-opacity"
+        >
+          CrowdLens
+        </Link>
+        <span className="text-sm text-[var(--color-muted)] font-[family-name:var(--font-body)]">
+          / {channelId.replace('-', ' ').replace('_', ' ')}
+        </span>
+      </nav>
+
+      <div className="flex flex-col p-4 min-h-[calc(100vh-49px)] gap-4">
+        {/* Top bar */}
+        <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg px-4 py-3 flex items-center justify-end gap-2">
           {sessionId ? (
             <button
               onClick={handleStop}
@@ -75,7 +84,7 @@ export function Dashboard() {
           ) : (
             <button
               onClick={handleStart}
-              disabled={loading || !channelId}
+              disabled={loading}
               className="bg-[var(--color-accent)] hover:bg-[var(--color-accent)]/90 text-[var(--color-bg)] px-6 py-2 rounded-lg font-semibold font-[family-name:var(--font-body)] cursor-pointer transition-colors duration-200 disabled:opacity-50"
             >
               {loading ? 'Starting...' : 'Start Monitoring'}
@@ -89,28 +98,25 @@ export function Dashboard() {
             Reset
           </button>
         </div>
-      </div>
 
-      {/* Main area: video left (stretch to match right), stats + chart right */}
-      <div className="flex flex-col lg:flex-row gap-4 flex-1">
-        {/* Left: Live preview — stretch to match right panel height, video centered */}
-        <div className="lg:w-2/3 flex relative">
-          <LivePreview />
-          <MatchOverlay />
+        {/* Main area: video left, stats + chart right */}
+        <div className="flex flex-col lg:flex-row gap-4 flex-1">
+          <div className="lg:w-2/3 flex relative">
+            <LivePreview />
+            <MatchOverlay />
+          </div>
+          <div className="lg:w-1/3 flex flex-col gap-4">
+            <TargetSearchPanel />
+            <StatsPanel />
+            <TimeChart />
+          </div>
         </div>
 
-        {/* Right: Stats + Chart stacked */}
-        <div className="lg:w-1/3 flex flex-col gap-4">
-          <TargetSearchPanel />
-          <StatsPanel />
-          <TimeChart />
-        </div>
+        {/* Footer */}
+        <footer className="text-center py-3 text-xs text-[var(--color-muted)] font-[family-name:var(--font-body)] border-t border-[var(--color-border)]">
+          &copy; 2026, Target Group &middot; Build: {__BUILD_TIME__}
+        </footer>
       </div>
-
-      {/* Footer */}
-      <footer className="text-center py-3 text-xs text-[var(--color-muted)] font-[family-name:var(--font-body)] border-t border-[var(--color-border)]">
-        &copy; 2026, Target Group &middot; Build: {__BUILD_TIME__}
-      </footer>
-    </div>
+    </>
   )
 }

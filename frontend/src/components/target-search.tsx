@@ -94,9 +94,9 @@ export function TargetSearchPanel() {
         /* State 2: Target cleared after match — show result summary */
         <div className="flex items-start gap-3 mb-3">
           <img
-            src={`data:image/jpeg;base64,${matchResult.crop_jpeg}`}
-            alt="Matched"
-            className="w-16 h-20 rounded-lg object-cover border border-red-500/50"
+            src={targetThumbnailUrl || ''}
+            alt="Target"
+            className="w-16 h-16 rounded-lg object-cover border border-red-500/50"
           />
           <div className="flex-1 min-w-0">
             <p className="text-xs text-red-400 font-[family-name:var(--font-body)] font-semibold">
@@ -106,7 +106,7 @@ export function TargetSearchPanel() {
               Track #{matchResult.track_id} &middot; {new Date(matchResult.timestamp).toLocaleTimeString()}
             </p>
             <button
-              onClick={() => setMatchResult(null)}
+              onClick={() => { setMatchResult(null); setTargetActive(false, undefined, null) }}
               className="mt-1 text-xs text-[var(--color-muted)] hover:text-[var(--color-text)] font-[family-name:var(--font-body)] cursor-pointer"
             >
               Dismiss
